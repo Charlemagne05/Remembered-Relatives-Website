@@ -1,0 +1,169 @@
+// Centralized API client — all calls go through here
+
+export interface Memorial {
+  id: number;
+  user_id: number;
+  title: string;        // nom de la personne décédée
+  relationship: string; // ex: "Grand-mère", "Meilleur ami"
+  content: string;      // le récit
+  author: string;       // username de l'auteur
+  image_path: string | null;
+  is_public: number;
+  created_at: string;
+  likes: number;
+  user_liked: boolean;
+}
+
+export interface Comment {
+  id: number;
+  story_id: number;
+  user_id: number;
+  username: string;
+  content: string;
+  created_at: string;
+}
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  is_admin: boolean;
+  token: string;
+}
+
+function getToken(): string | null {
+  const raw = localStorage.getItem('auth') || sessionStorage.getItem('auth');
+  if (!raw) return null;
+  try {
+    return (JSON.parse(raw) as AuthUser).token;
+  } catch {
+    return null;
+  }
+}
+
+function authHeaders(): HeadersInit {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  const data = await res.json();
+  if (!res.ok) {
+    const message = data.error || data.errors?.[0]?.msg || 'Erreur serveur';
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export async function register(username: string, email: string, password: string): Promise<AuthUser> {
+  const res = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email, password }),
+  });
+  return handleResponse<AuthUser>(res);
+}
+
+export async function login(username: string, password: string): Promise<AuthUser> {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  return handleResponse<AuthUser>(res);
+}
+
+// ── Stories ───────────────────────────────────────────────────────────────────
+
+export async function getStories(search?: string, sort?: 'likes' | 'date'): Promise<Memorial[]> {
+  const params = new URLSearchParams();
+  if (search) params.set('search', search);
+  if (sort) params.set('sort', sort);
+  const res = await fetch(`/api/stories?${params}`, { headers: authHeaders() });
+  return handleResponse<Memorial[]>(res);
+}
+
+export async function getStory(id: number): Promise<Memorial> {
+  const res = await fetch(`/api/stories/${id}`, { headers: authHeaders() });
+  return handleResponse<Memorial>(res);
+}
+
+export async function createStory(data: {
+  title: string;
+  relationship: string;
+  content: string;
+  is_public?: number;
+  image?: File | null;
+}): Promise<Memorial> {
+  const form = new FormData();
+  form.append('title', data.title);
+  form.append('relationship', data.relationship);
+  form.append('content', data.content);
+  form.append('is_public', String(data.is_public ?? 1));
+  if (data.image) form.append('image', data.image);
+
+  const res = await fetch('/api/stories', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+  return handleResponse<Memorial>(res);
+}
+
+export async function updateStory(
+  id: number,
+  data: { title?: string; relationship?: string; content?: string; is_public?: number }
+): Promise<Memorial> {
+  const res = await fetch(`/api/stories/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Memorial>(res);
+}
+
+export async function deleteStory(id: number): Promise<void> {
+  const res = await fetch(`/api/stories/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleResponse<void>(res);
+}
+
+export async function toggleLike(id: number): Promise<{ liked: boolean; likes: number }> {
+  const res = await fetch(`/api/stories/${id}/like`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  return handleResponse<{ liked: boolean; likes: number }>(res);
+}
+
+export async function getUserStories(userId: number): Promise<Memorial[]> {
+  const res = await fetch(`/api/stories/user/${userId}`, { headers: authHeaders() });
+  return handleResponse<Memorial[]>(res);
+}
+
+// ── Comments ──────────────────────────────────────────────────────────────────
+
+export async function getComments(storyId: number): Promise<Comment[]> {
+  const res = await fetch(`/api/stories/${storyId}/comments`, { headers: authHeaders() });
+  return handleResponse<Comment[]>(res);
+}
+
+export async function postComment(storyId: number, content: string): Promise<Comment> {
+  const res = await fetch(`/api/stories/${storyId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ content }),
+  });
+  return handleResponse<Comment>(res);
+}
+
+export async function deleteComment(storyId: number, commentId: number): Promise<void> {
+  const res = await fetch(`/api/stories/${storyId}/comments/${commentId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleResponse<void>(res);
+}
