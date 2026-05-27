@@ -132,6 +132,40 @@ router.delete('/comments/:id', (req, res) => {
   res.json({ message: 'Commentaire supprimé' });
 });
 
+// ── Signalements ─────────────────────────────────────────────────────────────
+
+// GET /api/admin/reports — histoires avec signalements
+router.get('/reports', (req, res) => {
+  const stories = db.prepare(`
+    SELECT s.*, u.username as author,
+      COUNT(r.id) as report_count
+    FROM stories s
+    JOIN users u ON u.id = s.user_id
+    JOIN reports r ON r.story_id = s.id
+    GROUP BY s.id
+    ORDER BY report_count DESC
+  `).all();
+
+  const result = stories.map((s) => {
+    const reports = db.prepare(`
+      SELECT r.*, u.username as reported_by_username
+      FROM reports r
+      JOIN users u ON u.id = r.reported_by
+      WHERE r.story_id = ?
+      ORDER BY r.created_at DESC
+    `).all(s.id);
+    return { ...s, reports };
+  });
+
+  res.json(result);
+});
+
+// DELETE /api/admin/reports/:storyId — effacer les signalements d'une histoire
+router.delete('/reports/:storyId', (req, res) => {
+  db.prepare('DELETE FROM reports WHERE story_id = ?').run(req.params.storyId);
+  res.json({ message: 'Signalements effacés' });
+});
+
 // ── Mots bannis ───────────────────────────────────────────────────────────────
 
 // GET /api/admin/banned-words

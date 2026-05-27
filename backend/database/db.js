@@ -54,6 +54,16 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     word TEXT UNIQUE NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_id INTEGER NOT NULL,
+    reported_by INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE,
+    FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 // Migration : ajoute relationship si la colonne n'existe pas encore (DB créée avant)

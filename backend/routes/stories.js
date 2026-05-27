@@ -181,6 +181,25 @@ router.delete('/:id', requireAuth, (req, res) => {
   res.json({ message: 'Histoire supprimée' });
 });
 
+// POST /api/stories/:id/report
+router.post('/:id/report', requireAuth, (req, res) => {
+  const story = db.prepare('SELECT id FROM stories WHERE id = ?').get(req.params.id);
+  if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
+
+  const { reason } = req.body;
+  if (!reason?.trim()) return res.status(400).json({ error: 'Raison requise' });
+
+  const already = db
+    .prepare('SELECT 1 FROM reports WHERE story_id = ? AND reported_by = ?')
+    .get(story.id, req.user.id);
+  if (already) return res.status(409).json({ error: 'Vous avez déjà signalé cette histoire' });
+
+  db.prepare('INSERT INTO reports (story_id, reported_by, reason) VALUES (?, ?, ?)')
+    .run(story.id, req.user.id, reason.trim());
+
+  res.status(201).json({ message: 'Signalement envoyé' });
+});
+
 // POST /api/stories/:id/like — toggle like
 router.post('/:id/like', requireAuth, (req, res) => {
   const story = db.prepare('SELECT id FROM stories WHERE id = ?').get(req.params.id);

@@ -4,7 +4,8 @@ import {
   Button, Typography, Box, Chip, Divider, TextField,
   IconButton, CircularProgress, Alert, Avatar,
 } from '@mui/material';
-import { type Memorial, type AuthUser, type Comment, updateStory, deleteStory, toggleLike, getComments, postComment, deleteComment } from '../../api';
+import { type Memorial, type AuthUser, type Comment, updateStory, deleteStory, toggleLike, getComments, postComment, deleteComment, reportStory } from '../../api';
+import { validateContent } from '../../utils/contentFilter';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import PersonIcon from '@mui/icons-material/Person';
@@ -12,6 +13,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SendIcon from '@mui/icons-material/Send';
+import FlagIcon from '@mui/icons-material/Flag';
 
 interface MemorialDetailDialogProps {
   memorial: Memorial | null;
@@ -40,6 +42,11 @@ export function MemorialDetailDialog({
   const [submittingComment, setSubmittingComment] = useState(false);
   const [commentError, setCommentError] = useState('');
 
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(false);
+
   useEffect(() => {
     if (!memorial) return;
     setLikeCount(memorial.likes);
@@ -61,7 +68,27 @@ export function MemorialDetailDialog({
     setIsEditing(true);
   };
 
+  const handleSubmitReport = async () => {
+    if (!reportReason.trim()) return;
+    setSubmittingReport(true);
+    try {
+      await reportStory(memorial.id, reportReason.trim());
+      setReportSuccess(true);
+      setReportReason('');
+      setTimeout(() => { setReportDialogOpen(false); setReportSuccess(false); }, 2000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error submitting report');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
   const handleSaveEdit = async () => {
+    // Validation frontend (XSS + mots bannis locaux)
+    for (const [field, value] of [['title', editData.title], ['content', editData.content]] as [string, string][]) {
+      const check = validateContent(value);
+      if (!check.isValid) { setEditError(check.message ?? `Invalid ${field}`); return; }
+    }
     setSaving(true);
     setEditError('');
     try {
@@ -161,6 +188,12 @@ export function MemorialDetailDialog({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Chip label={memorial.relationship} color="primary" variant="outlined" />
               <Box sx={{ flex: 1 }} />
+              {currentUser && currentUser.id !== memorial.user_id && (
+                <IconButton size="small" title="Report this post"
+                  onClick={() => setReportDialogOpen(true)} color="default">
+                  <FlagIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              )}
               <IconButton onClick={handleLike} disabled={!currentUser || liking}
                 color={liked ? 'error' : 'default'} size="small">
                 {liked ? <FavoriteIcon /> : <FavoriteBorderIcon />}
@@ -279,6 +312,38 @@ export function MemorialDetailDialog({
           <Button onClick={onClose} variant="contained">Close</Button>
         )}
       </DialogActions>
+
+      {/* Report Dialog */}
+      <Dialog open={reportDialogOpen} onClose={() => setReportDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Report Post</DialogTitle>
+        <DialogContent>
+          {reportSuccess ? (
+            <Alert severity="success">Thank you for your report. An admin will review this post.</Alert>
+          ) : (
+            <>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Please explain why you're reporting this memorial post.
+              </Typography>
+              <TextField fullWidth multiline rows={4}
+                label="Reason for reporting"
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                placeholder="e.g., Inappropriate content, spam, offensive language..."
+              />
+            </>
+          )}
+        </DialogContent>
+        {!reportSuccess && (
+          <DialogActions>
+            <Button onClick={() => setReportDialogOpen(false)} disabled={submittingReport}>Cancel</Button>
+            <Button onClick={handleSubmitReport} variant="contained" color="error"
+              disabled={!reportReason.trim() || submittingReport}
+              startIcon={submittingReport ? <CircularProgress size={16} /> : <FlagIcon />}>
+              Submit Report
+            </Button>
+          </DialogActions>
+        )}
+      </Dialog>
     </Dialog>
   );
 }

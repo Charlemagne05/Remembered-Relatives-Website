@@ -14,6 +14,20 @@ export interface Memorial {
   user_liked: boolean;
 }
 
+export interface Report {
+  id: number;
+  story_id: number;
+  reported_by: number;
+  reported_by_username: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface ReportedStory extends Memorial {
+  report_count: number;
+  reports: Report[];
+}
+
 export interface Comment {
   id: number;
   story_id: number;
@@ -142,6 +156,30 @@ export async function toggleLike(id: number): Promise<{ liked: boolean; likes: n
 export async function getUserStories(userId: number): Promise<Memorial[]> {
   const res = await fetch(`/api/stories/user/${userId}`, { headers: authHeaders() });
   return handleResponse<Memorial[]>(res);
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export async function reportStory(id: number, reason: string): Promise<void> {
+  const res = await fetch(`/api/stories/${id}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ reason }),
+  });
+  return handleResponse<void>(res);
+}
+
+export async function getAdminReports(): Promise<ReportedStory[]> {
+  const res = await fetch('/api/admin/reports', { headers: authHeaders() });
+  return handleResponse<ReportedStory[]>(res);
+}
+
+export async function dismissReports(storyId: number): Promise<void> {
+  const res = await fetch(`/api/admin/reports/${storyId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleResponse<void>(res);
 }
 
 // ── Comments ──────────────────────────────────────────────────────────────────

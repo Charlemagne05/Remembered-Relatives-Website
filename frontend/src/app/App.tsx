@@ -2,25 +2,40 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Container, Box, Typography, Fab, Button, AppBar, Toolbar,
   Avatar, Menu, MenuItem, ListItemIcon, CircularProgress, Alert,
+  InputBase, Paper, IconButton,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import LoginIcon from '@mui/icons-material/Login';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
+import ShieldIcon from '@mui/icons-material/Shield';
 import { MemorialGrid } from './components/MemorialGrid';
 import { CreateMemorialDialog } from './components/CreateMemorialDialog';
 import { MemorialDetailDialog } from './components/MemorialDetailDialog';
 import { AuthDialog } from './components/AuthDialog';
 import { RememberMeDialog } from './components/RememberMeDialog';
 import { ProfileDialog } from './components/ProfileDialog';
+import { AdminPanel } from './components/AdminPanel';
 import { type Memorial, type AuthUser, getStories } from '../api';
 
 export type { Memorial };
+
+const COLOR_OPTIONS = [
+  'linear-gradient(to bottom, #f8fafc, #f1f5f9)',
+  'linear-gradient(to bottom, #fff7ed, #fed7aa)',
+  'linear-gradient(to bottom, #eff6ff, #dbeafe)',
+  'linear-gradient(to bottom, #f0fdf4, #dcfce7)',
+  'linear-gradient(to bottom, #faf5ff, #f3e8ff)',
+  'linear-gradient(to bottom, #fff1f2, #fce7f3)',
+];
 
 export default function App() {
   const [memorials, setMemorials] = useState<Memorial[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedMemorial, setSelectedMemorial] = useState<Memorial | null>(null);
@@ -31,6 +46,11 @@ export default function App() {
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [selectedAuthorId, setSelectedAuthorId] = useState<number | null>(null);
   const [selectedAuthorName, setSelectedAuthorName] = useState('');
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+
+  const [backgroundColor, setBackgroundColor] = useState<string>(() => {
+    return localStorage.getItem('backgroundColor') || COLOR_OPTIONS[0];
+  });
 
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     const raw = localStorage.getItem('auth') || sessionStorage.getItem('auth');
@@ -52,6 +72,15 @@ export default function App() {
   }, []);
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
+
+  // Filtrage local par recherche
+  const filteredMemorials = searchQuery.trim()
+    ? memorials.filter(m =>
+        m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.author.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : memorials;
 
   const handleStoryCreated = (story: Memorial) => {
     setMemorials((prev) => [story, ...prev]);
@@ -100,12 +129,9 @@ export default function App() {
     setAnchorEl(null);
   };
 
-  const handleAddMemorialClick = () => {
-    if (!currentUser) {
-      setAuthDialogOpen(true);
-    } else {
-      setCreateDialogOpen(true);
-    }
+  const handleBackgroundColorChange = (color: string) => {
+    setBackgroundColor(color);
+    localStorage.setItem('backgroundColor', color);
   };
 
   const handleViewAuthorProfile = (authorName: string, authorId: number) => {
@@ -115,24 +141,50 @@ export default function App() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom, #f8fafc, #f1f5f9)' }}>
+    <Box sx={{ minHeight: '100vh', background: backgroundColor }}>
       <AppBar position="static" color="transparent" elevation={0}
         sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            In Loving Memory
+            Relatives Remembered
           </Typography>
+
+          {/* Barre de recherche */}
+          <Paper elevation={0} sx={{
+            display: 'flex', alignItems: 'center',
+            border: '1px solid', borderColor: 'divider', borderRadius: 3,
+            px: 1.5, py: 0.5, mr: 2, width: { xs: 160, sm: 240 }, bgcolor: 'grey.50',
+          }}>
+            <SearchIcon sx={{ color: 'text.disabled', mr: 1, fontSize: 20 }} />
+            <InputBase
+              placeholder="Search by name…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ flex: 1, fontSize: '0.95rem' }}
+            />
+            {searchQuery && (
+              <IconButton size="small" onClick={() => setSearchQuery('')} sx={{ p: 0.25 }}>
+                <ClearIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            )}
+          </Paper>
+
           {currentUser ? (
             <>
               <Avatar onClick={(e) => setAnchorEl(e.currentTarget)}
                 sx={{ cursor: 'pointer', bgcolor: 'primary.main' }}>
                 {currentUser.username.charAt(0).toUpperCase()}
               </Avatar>
-              <Menu anchorEl={anchorEl} open={Boolean(anchorEl)}
-                onClose={() => setAnchorEl(null)}
+              <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
-                <MenuItem onClick={() => { setAnchorEl(null); }}>
+                {currentUser.is_admin && (
+                  <MenuItem onClick={() => { setAnchorEl(null); setAdminPanelOpen(true); }}>
+                    <ListItemIcon><ShieldIcon fontSize="small" /></ListItemIcon>
+                    Admin Panel
+                  </MenuItem>
+                )}
+                <MenuItem onClick={() => setAnchorEl(null)}>
                   <ListItemIcon><PersonIcon fontSize="small" /></ListItemIcon>
                   {currentUser.username}
                 </MenuItem>
@@ -153,14 +205,13 @@ export default function App() {
       <Container maxWidth="lg" sx={{ py: 6 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant="h3" component="h1" sx={{ mb: 2 }}>
-            In Loving Memory
+            Relatives Remembered
           </Typography>
           <Typography variant="body1" color="text.secondary"
             sx={{ maxWidth: '42rem', mx: 'auto', mb: 4 }}>
             A place to honor and remember those who have touched our lives.
             Share their stories, celebrate their legacy, and keep their memory alive.
           </Typography>
-
           <Box sx={{ display: 'flex', gap: 3, justifyContent: 'center', mb: 6 }}>
             {!currentUser ? (
               <Button variant="contained" size="large" startIcon={<LoginIcon />}
@@ -180,31 +231,31 @@ export default function App() {
 
         {loadError && <Alert severity="error" sx={{ mb: 3 }}>{loadError}</Alert>}
 
+        {searchQuery.trim() && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {filteredMemorials.length === 0
+              ? `No stories found for "${searchQuery}"`
+              : `${filteredMemorials.length} stor${filteredMemorials.length === 1 ? 'y' : 'ies'} found for "${searchQuery}"`}
+          </Typography>
+        )}
+
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
           </Box>
         ) : (
-          <MemorialGrid memorials={memorials} onSelectMemorial={setSelectedMemorial} />
+          <MemorialGrid memorials={filteredMemorials} onSelectMemorial={setSelectedMemorial} />
         )}
 
         <Fab color="primary" aria-label="add memorial"
           sx={{ position: 'fixed', bottom: 32, right: 32 }}
-          onClick={handleAddMemorialClick}>
+          onClick={() => currentUser ? setCreateDialogOpen(true) : setAuthDialogOpen(true)}>
           <AddIcon />
         </Fab>
 
-        <AuthDialog
-          open={authDialogOpen}
-          onClose={() => setAuthDialogOpen(false)}
-          onLogin={handleLogin}
-        />
+        <AuthDialog open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} onLogin={handleLogin} />
 
-        <CreateMemorialDialog
-          open={createDialogOpen}
-          onClose={() => setCreateDialogOpen(false)}
-          onCreated={handleStoryCreated}
-        />
+        <CreateMemorialDialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} onCreated={handleStoryCreated} />
 
         <MemorialDetailDialog
           memorial={selectedMemorial}
@@ -215,10 +266,7 @@ export default function App() {
           onViewAuthorProfile={handleViewAuthorProfile}
         />
 
-        <RememberMeDialog
-          open={rememberMeDialogOpen}
-          onAnswer={handleRememberMeAnswer}
-        />
+        <RememberMeDialog open={rememberMeDialogOpen} onAnswer={handleRememberMeAnswer} />
 
         {selectedAuthorId !== null && (
           <ProfileDialog
@@ -226,12 +274,18 @@ export default function App() {
             onClose={() => setProfileDialogOpen(false)}
             authorName={selectedAuthorName}
             authorId={selectedAuthorId}
-            onSelectMemorial={(m) => {
-              setProfileDialogOpen(false);
-              setSelectedMemorial(m);
-            }}
+            onSelectMemorial={(m) => { setProfileDialogOpen(false); setSelectedMemorial(m); }}
           />
         )}
+
+        <AdminPanel
+          open={adminPanelOpen}
+          onClose={() => setAdminPanelOpen(false)}
+          backgroundColor={backgroundColor}
+          onBackgroundColorChange={handleBackgroundColorChange}
+          colorOptions={COLOR_OPTIONS}
+          onStoryDeleted={handleStoryDeleted}
+        />
       </Container>
     </Box>
   );
