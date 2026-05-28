@@ -13,7 +13,7 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    cb(null, `story-${Date.now()}${ext}`);
+    cb(null, `story-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
   },
 });
 const upload = multer({
@@ -35,6 +35,12 @@ function getOptionalUserId(req) {
   }
 }
 
+function getImages(storyId) {
+  return db
+    .prepare('SELECT id, image_path FROM story_images WHERE story_id = ? ORDER BY sort_order, id')
+    .all(storyId);
+}
+
 function enrichStory(story, userId) {
   const likeCount = db
     .prepare('SELECT COUNT(*) as count FROM story_likes WHERE story_id = ?')
@@ -43,10 +49,11 @@ function enrichStory(story, userId) {
     ? Boolean(db.prepare('SELECT 1 FROM story_likes WHERE story_id = ? AND user_id = ?').get(story.id, userId))
     : false;
   const author = db.prepare('SELECT username FROM users WHERE id = ?').get(story.user_id);
-  return { ...story, likes: likeCount, user_liked: userLiked, author: author?.username };
+  const images = getImages(story.id);
+  return { ...story, images, likes: likeCount, user_liked: userLiked, author: author?.username };
 }
 
-// GET /api/stories — liste publique avec recherche et tri
+// ── GET /api/stories ──────────────────────────────────────────────────────────
 router.get('/', (req, res) => {
   const { search, sort } = req.query;
   const userId = getOptionalUserId(req);
@@ -63,14 +70,12 @@ router.get('/', (req, res) => {
 
   let stories = db.prepare(query).all(...params).map((s) => enrichStory(s, userId));
 
-  if (sort === 'likes') {
-    stories.sort((a, b) => b.likes - a.likes);
-  }
+  if (sort === 'likes') stories.sort((a, b) => b.likes - a.likes);
 
   res.json(stories);
 });
 
-// GET /api/stories/user/:userId — histoires d'un profil
+// ── GET /api/stories/user/:userId ─────────────────────────────────────────────
 router.get('/user/:userId', (req, res) => {
   const viewerIsOwner =
     req.headers.authorization &&
@@ -79,9 +84,7 @@ router.get('/user/:userId', (req, res) => {
         const jwt = require('jsonwebtoken');
         const id = jwt.verify(req.headers.authorization.slice(7), process.env.JWT_SECRET).id;
         return id === parseInt(req.params.userId);
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     })();
 
   const stories = viewerIsOwner
@@ -91,13 +94,12 @@ router.get('/user/:userId', (req, res) => {
   res.json(stories.map((s) => enrichStory(s, null)));
 });
 
-// GET /api/stories/:id
+// ── GET /api/stories/:id ──────────────────────────────────────────────────────
 router.get('/:id', (req, res) => {
   const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(req.params.id);
   if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
 
   const userId = getOptionalUserId(req);
-
   if (!story.is_public && story.user_id !== userId) {
     return res.status(403).json({ error: 'Histoire privée' });
   }
@@ -105,11 +107,11 @@ router.get('/:id', (req, res) => {
   res.json(enrichStory(story, userId));
 });
 
-// POST /api/stories — créer une histoire
+// ── POST /api/stories ─────────────────────────────────────────────────────────
 router.post(
   '/',
   requireAuth,
-  upload.single('image'),
+  upload.array('images', 15),
   checkBannedWords('title', 'content'),
   [
     body('title').trim().isLength({ min: 3, max: 100 }).withMessage('Titre: 3-100 caractères'),
@@ -117,23 +119,25 @@ router.post(
   ],
   (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { title, relationship = '', content, is_public = 1 } = req.body;
-    const image_path = req.file ? `/uploads/${req.file.filename}` : null;
 
     const result = db
-      .prepare('INSERT INTO stories (user_id, title, relationship, content, image_path, is_public) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(req.user.id, title, relationship, content, image_path, is_public ? 1 : 0);
+      .prepare('INSERT INTO stories (user_id, title, relationship, content, is_public) VALUES (?, ?, ?, ?, ?)')
+      .run(req.user.id, title, relationship, content, is_public ? 1 : 0);
+
+    if (req.files && req.files.length > 0) {
+      const ins = db.prepare('INSERT INTO story_images (story_id, image_path, sort_order) VALUES (?, ?, ?)');
+      req.files.forEach((file, i) => ins.run(result.lastInsertRowid, `/uploads/${file.filename}`, i));
+    }
 
     const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(enrichStory(story, req.user.id));
   }
 );
 
-// PUT /api/stories/:id — modifier sa propre histoire
+// ── PUT /api/stories/:id ──────────────────────────────────────────────────────
 router.put(
   '/:id',
   requireAuth,
@@ -164,7 +168,7 @@ router.put(
   }
 );
 
-// DELETE /api/stories/:id
+// ── DELETE /api/stories/:id ───────────────────────────────────────────────────
 router.delete('/:id', requireAuth, (req, res) => {
   const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(req.params.id);
   if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
@@ -172,16 +176,64 @@ router.delete('/:id', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Non autorisé' });
   }
 
-  if (story.image_path) {
-    const fullPath = path.join(__dirname, '..', story.image_path);
-    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-  }
+  const images = db.prepare('SELECT image_path FROM story_images WHERE story_id = ?').all(story.id);
+  images.forEach((img) => {
+    const fullPath = path.join(__dirname, '..', img.image_path);
+    if (fs.existsSync(fullPath)) { try { fs.unlinkSync(fullPath); } catch {} }
+  });
 
   db.prepare('DELETE FROM stories WHERE id = ?').run(story.id);
   res.json({ message: 'Histoire supprimée' });
 });
 
-// POST /api/stories/:id/report
+// ── POST /api/stories/:id/images — ajouter des photos à une story existante ──
+router.post('/:id/images', requireAuth, upload.array('images', 15), (req, res) => {
+  const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(req.params.id);
+  if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
+  if (story.user_id !== req.user.id && !req.user.is_admin) {
+    req.files?.forEach((f) => { try { fs.unlinkSync(f.path); } catch {} });
+    return res.status(403).json({ error: 'Non autorisé' });
+  }
+  if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Aucune image reçue' });
+
+  const currentCount = db
+    .prepare('SELECT COUNT(*) as count FROM story_images WHERE story_id = ?')
+    .get(story.id).count;
+
+  if (currentCount + req.files.length > 15) {
+    req.files.forEach((f) => { try { fs.unlinkSync(f.path); } catch {} });
+    return res.status(400).json({
+      error: `Maximum 15 photos. Cette story en a déjà ${currentCount}.`,
+    });
+  }
+
+  const ins = db.prepare('INSERT INTO story_images (story_id, image_path, sort_order) VALUES (?, ?, ?)');
+  req.files.forEach((file, i) => ins.run(story.id, `/uploads/${file.filename}`, currentCount + i));
+
+  res.json({ images: getImages(story.id) });
+});
+
+// ── DELETE /api/stories/:id/images/:imageId — supprimer une photo ────────────
+router.delete('/:id/images/:imageId', requireAuth, (req, res) => {
+  const story = db.prepare('SELECT * FROM stories WHERE id = ?').get(req.params.id);
+  if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
+  if (story.user_id !== req.user.id && !req.user.is_admin) {
+    return res.status(403).json({ error: 'Non autorisé' });
+  }
+
+  const image = db
+    .prepare('SELECT * FROM story_images WHERE id = ? AND story_id = ?')
+    .get(req.params.imageId, story.id);
+  if (!image) return res.status(404).json({ error: 'Image introuvable' });
+
+  const fullPath = path.join(__dirname, '..', image.image_path);
+  if (fs.existsSync(fullPath)) { try { fs.unlinkSync(fullPath); } catch {} }
+
+  db.prepare('DELETE FROM story_images WHERE id = ?').run(image.id);
+  res.json({ message: 'Image supprimée' });
+});
+
+// ── POST /api/stories/:id/report ──────────────────────────────────────────────
 router.post('/:id/report', requireAuth, (req, res) => {
   const story = db.prepare('SELECT id FROM stories WHERE id = ?').get(req.params.id);
   if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
@@ -200,7 +252,7 @@ router.post('/:id/report', requireAuth, (req, res) => {
   res.status(201).json({ message: 'Signalement envoyé' });
 });
 
-// POST /api/stories/:id/like — toggle like
+// ── POST /api/stories/:id/like ────────────────────────────────────────────────
 router.post('/:id/like', requireAuth, (req, res) => {
   const story = db.prepare('SELECT id FROM stories WHERE id = ?').get(req.params.id);
   if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
@@ -220,6 +272,58 @@ router.post('/:id/like', requireAuth, (req, res) => {
     .get(story.id).count;
 
   res.json({ liked: !existing, likes: count });
+});
+
+// ── GET /api/stories/:storyId/comments ───────────────────────────────────────
+router.get('/:storyId/comments', (req, res) => {
+  const comments = db
+    .prepare(`
+      SELECT c.*, u.username
+      FROM comments c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.story_id = ?
+      ORDER BY c.created_at ASC
+    `)
+    .all(req.params.storyId);
+  res.json(comments);
+});
+
+// ── POST /api/stories/:storyId/comments ──────────────────────────────────────
+router.post(
+  '/:storyId/comments',
+  requireAuth,
+  [body('content').trim().isLength({ min: 1, max: 500 })],
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const story = db.prepare('SELECT id FROM stories WHERE id = ?').get(req.params.storyId);
+    if (!story) return res.status(404).json({ error: 'Histoire introuvable' });
+
+    const result = db
+      .prepare('INSERT INTO comments (story_id, user_id, content) VALUES (?, ?, ?)')
+      .run(story.id, req.user.id, req.body.content);
+
+    const comment = db
+      .prepare('SELECT c.*, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?')
+      .get(result.lastInsertRowid);
+
+    res.status(201).json(comment);
+  }
+);
+
+// ── DELETE /api/stories/:storyId/comments/:commentId ─────────────────────────
+router.delete('/:storyId/comments/:commentId', requireAuth, (req, res) => {
+  const comment = db.prepare('SELECT * FROM comments WHERE id = ? AND story_id = ?').get(
+    req.params.commentId, req.params.storyId
+  );
+  if (!comment) return res.status(404).json({ error: 'Commentaire introuvable' });
+  if (comment.user_id !== req.user.id && !req.user.is_admin) {
+    return res.status(403).json({ error: 'Non autorisé' });
+  }
+
+  db.prepare('DELETE FROM comments WHERE id = ?').run(comment.id);
+  res.json({ message: 'Commentaire supprimé' });
 });
 
 module.exports = router;

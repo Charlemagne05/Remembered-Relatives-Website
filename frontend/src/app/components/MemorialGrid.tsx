@@ -28,13 +28,22 @@ export function MemorialGrid({ memorials, onSelectMemorial }: MemorialGridProps)
             sx={{ flexGrow: 1, display: 'flex', alignItems: 'stretch' }}
           >
             <CardContent sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
-              {memorial.image_path && (
-                <Box sx={{ width: '100%', height: 150, mb: 2, borderRadius: 1, overflow: 'hidden' }}>
+              {memorial.images?.[0] && (
+                <Box sx={{ width: '100%', height: 150, mb: 2, borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
                   <img
-                    src={memorial.image_path}
+                    src={memorial.images[0].image_path}
                     alt={memorial.title}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
+                  {memorial.images.length > 1 && (
+                    <Box sx={{
+                      position: 'absolute', bottom: 6, right: 6,
+                      bgcolor: 'rgba(0,0,0,0.55)', color: 'white',
+                      borderRadius: 1, px: 0.8, py: 0.2, fontSize: '0.72rem', fontWeight: 600,
+                    }}>
+                      +{memorial.images.length - 1} photo{memorial.images.length > 2 ? 's' : ''}
+                    </Box>
+                  )}
                 </Box>
               )}
 

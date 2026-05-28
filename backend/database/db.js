@@ -69,8 +69,27 @@ db.exec(`
 // Migration : ajoute relationship si la colonne n'existe pas encore (DB créée avant)
 try {
   db.exec(`ALTER TABLE stories ADD COLUMN relationship TEXT NOT NULL DEFAULT ''`);
-} catch {
-  // Colonne déjà présente, rien à faire
-}
+} catch { /* déjà présente */ }
+
+// Table pour les photos multiples (max 15 par story)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS story_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_id INTEGER NOT NULL,
+    image_path TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY (story_id) REFERENCES stories(id) ON DELETE CASCADE
+  );
+`);
+
+// Migration : déplace les image_path existantes vers story_images
+try {
+  const rows = db.prepare('SELECT id, image_path FROM stories WHERE image_path IS NOT NULL').all();
+  const hasImg = db.prepare('SELECT 1 FROM story_images WHERE story_id = ?');
+  const ins = db.prepare('INSERT INTO story_images (story_id, image_path, sort_order) VALUES (?, ?, 0)');
+  for (const row of rows) {
+    if (!hasImg.get(row.id)) ins.run(row.id, row.image_path);
+  }
+} catch { /* ignore */ }
 
 module.exports = db;

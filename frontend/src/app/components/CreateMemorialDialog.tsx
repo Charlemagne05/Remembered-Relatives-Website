@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Button, Box, Typography, IconButton, CircularProgress, Alert,
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import { createStory, type Memorial } from '../../api';
+
+const MAX_IMAGES = 15;
 
 interface CreateMemorialDialogProps {
   open: boolean;
@@ -14,15 +17,12 @@ interface CreateMemorialDialogProps {
 }
 
 export function CreateMemorialDialog({ open, onClose, onCreated }: CreateMemorialDialogProps) {
-  const [formData, setFormData] = useState({
-    title: '',
-    relationship: '',
-    content: '',
-  });
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ title: '', relationship: '', content: '' });
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +34,7 @@ export function CreateMemorialDialog({ open, onClose, onCreated }: CreateMemoria
         relationship: formData.relationship,
         content: formData.content,
         is_public: 1,
-        image: imageFile,
+        images: imageFiles,
       });
       onCreated(story);
       handleClose();
@@ -50,28 +50,38 @@ export function CreateMemorialDialog({ open, onClose, onCreated }: CreateMemoria
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    const remaining = MAX_IMAGES - imageFiles.length;
+    const toAdd = files.slice(0, remaining);
+
+    setImageFiles((prev) => [...prev, ...toAdd]);
+    toAdd.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () =>
+        setImagePreviews((prev) => [...prev, reader.result as string]);
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleRemoveImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
+  const handleRemoveImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleClose = () => {
     setFormData({ title: '', relationship: '', content: '' });
-    setImageFile(null);
-    setImagePreview(null);
+    setImageFiles([]);
+    setImagePreviews([]);
     setError('');
     onClose();
   };
 
   const isValid = formData.title.length >= 3 && formData.relationship && formData.content.length >= 10;
+  const canAddMore = imageFiles.length < MAX_IMAGES;
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth
@@ -112,23 +122,54 @@ export function CreateMemorialDialog({ open, onClose, onCreated }: CreateMemoria
             error={formData.content.length > 4000}
           />
 
+          {/* Photos section */}
           <Box>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Photo (optional)
-            </Typography>
-            {imagePreview ? (
-              <Box sx={{ position: 'relative', width: 200, height: 150, borderRadius: 1, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <IconButton size="small" onClick={handleRemoveImage}
-                  sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'background.paper', '&:hover': { bgcolor: 'error.main', color: 'white' } }}>
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ) : (
-              <Button component="label" variant="outlined" startIcon={<CloudUploadIcon />} fullWidth>
-                Upload Photo
-                <input type="file" hidden accept="image/jpeg,image/jpg,image/png,image/webp" onChange={handleImageUpload} />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2">
+                Photos (optional) — {imageFiles.length} / {MAX_IMAGES}
+              </Typography>
+              {canAddMore && imagePreviews.length > 0 && (
+                <Button size="small" component="label" startIcon={<AddPhotoAlternateIcon />} variant="outlined">
+                  Add more
+                  <input ref={fileInputRef} type="file" hidden multiple
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    onChange={handleImageUpload} />
+                </Button>
+              )}
+            </Box>
+
+            {imagePreviews.length === 0 ? (
+              <Button component="label" variant="outlined" startIcon={<CloudUploadIcon />}
+                fullWidth sx={{ py: 3, borderStyle: 'dashed' }}>
+                Upload up to {MAX_IMAGES} photos
+                <input ref={fileInputRef} type="file" hidden multiple
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handleImageUpload} />
               </Button>
+            ) : (
+              <Box sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                gap: 1,
+              }}>
+                {imagePreviews.map((preview, i) => (
+                  <Box key={i} sx={{
+                    position: 'relative', aspectRatio: '1',
+                    borderRadius: 1, overflow: 'hidden',
+                    border: '1px solid', borderColor: 'divider',
+                  }}>
+                    <img src={preview} alt={`Photo ${i + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <IconButton size="small" onClick={() => handleRemoveImage(i)} sx={{
+                      position: 'absolute', top: 2, right: 2,
+                      bgcolor: 'rgba(0,0,0,0.55)', color: 'white', p: 0.3,
+                      '&:hover': { bgcolor: 'error.main' },
+                    }}>
+                      <DeleteIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Box>
             )}
           </Box>
         </Box>
