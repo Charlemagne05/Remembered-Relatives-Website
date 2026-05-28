@@ -41,7 +41,7 @@ router.post(
       { expiresIn: '7d' }
     );
 
-    res.status(201).json({ token, username, is_admin: false });
+    res.status(201).json({ id: result.lastInsertRowid, token, username, is_admin: false });
   }
 );
 
@@ -75,7 +75,7 @@ router.post(
       { expiresIn: '7d' }
     );
 
-    res.json({ token, username: user.username, is_admin: Boolean(user.is_admin) });
+    res.json({ id: user.id, token, username: user.username, is_admin: Boolean(user.is_admin) });
   }
 );
 

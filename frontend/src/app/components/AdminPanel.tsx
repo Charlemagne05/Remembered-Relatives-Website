@@ -70,8 +70,8 @@ export function AdminPanel({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="h5">Admin Panel</Typography>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '1.5rem', fontWeight: 600 }}>
+        Admin Panel
       </DialogTitle>
 
       <DialogContent>
