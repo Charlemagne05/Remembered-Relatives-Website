@@ -24,8 +24,18 @@ app.use('/api/admin', adminRoutes);
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use((err, req, res, next) => {
+  // Erreurs Multer (upload fichiers)
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ error: 'Image trop lourde (max 5MB)' });
+    return res.status(400).json({ error: 'Image trop lourde (max 5 MB par fichier)' });
+  }
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+    return res.status(400).json({ error: 'Champ de fichier inattendu' });
+  }
+  if (err.code === 'LIMIT_FILE_COUNT') {
+    return res.status(400).json({ error: 'Maximum 15 images par story' });
+  }
+  if (err.name === 'MulterError') {
+    return res.status(400).json({ error: `Erreur upload: ${err.message}` });
   }
   console.error(err);
   res.status(500).json({ error: 'Erreur serveur' });
