@@ -1,6 +1,15 @@
-// Banned words and XSS patterns
+// Banned words and XSS patterns — vérification côté client (le backend vérifie aussi en DB)
 const BANNED_WORDS = [
-  'offensive1', 'offensive2', 'offensive3', // Add actual banned words as needed
+  // Insultes françaises
+  'connard','connasse','salope','pute','putain','enculé','enculer',
+  'fils de pute','nique','niquer','baise','baiser','bite','couille',
+  'chier','foutre','fdp','tg','ta gueule','gueule','con','conne',
+  'abruti','crétin','débile','taré','tarée','mongol',
+  'raciste','nazi','pédé','pd','tapette','gouine',
+  // Insultes anglaises
+  'fuck','fucking','fucker','shit','asshole','bitch','bastard','dick','cunt',
+  'pussy','cock','whore','slut','nigger','nigga','faggot','retard',
+  'kill yourself','kys',
 ];
 
 const XSS_PATTERNS = [

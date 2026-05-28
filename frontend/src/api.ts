@@ -232,3 +232,32 @@ export async function deleteComment(storyId: number, commentId: number): Promise
   });
   return handleResponse<void>(res);
 }
+
+// ── Banned Words ──────────────────────────────────────────────────────────────
+
+export interface BannedWord {
+  id: number;
+  word: string;
+}
+
+export async function getBannedWords(): Promise<BannedWord[]> {
+  const res = await fetch('/api/admin/banned-words', { headers: authHeaders() });
+  return handleResponse<BannedWord[]>(res);
+}
+
+export async function addBannedWord(word: string): Promise<BannedWord> {
+  const res = await fetch('/api/admin/banned-words', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ word }),
+  });
+  return handleResponse<BannedWord>(res);
+}
+
+export async function deleteBannedWord(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/banned-words/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return handleResponse<void>(res);
+}
