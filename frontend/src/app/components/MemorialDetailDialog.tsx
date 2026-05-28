@@ -229,16 +229,6 @@ export function MemorialDetailDialog({
           <Typography variant="h5" component="span" sx={{ flex: 1 }}>
             {isEditing ? 'Edit Memorial' : memorial.title}
           </Typography>
-          {isAuthor && !isEditing && (
-            <>
-              <IconButton onClick={handleEditClick} color="primary" size="small">
-                <EditIcon />
-              </IconButton>
-              <IconButton onClick={handleDelete} color="error" size="small" disabled={deleting}>
-                {deleting ? <CircularProgress size={18} /> : <DeleteIcon />}
-              </IconButton>
-            </>
-          )}
         </Box>
       </DialogTitle>
 
@@ -494,7 +484,30 @@ export function MemorialDetailDialog({
             </Button>
           </>
         ) : (
-          <Button onClick={onClose} variant="contained">Close</Button>
+          <>
+            {isAuthor && (
+              <>
+                <Button
+                  onClick={handleEditClick}
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<EditIcon />}
+                >
+                  Edit My Story
+                </Button>
+                <Button
+                  onClick={handleDelete}
+                  variant="outlined"
+                  color="error"
+                  startIcon={deleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+                  disabled={deleting}
+                >
+                  Delete
+                </Button>
+              </>
+            )}
+            <Button onClick={onClose} variant="contained">Close</Button>
+          </>
         )}
       </DialogActions>
 
