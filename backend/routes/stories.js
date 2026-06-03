@@ -121,6 +121,15 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
+    // Enforce max 10 stories per user
+    const storyCount = db
+      .prepare('SELECT COUNT(*) as count FROM stories WHERE user_id = ?')
+      .get(req.user.id).count;
+    if (storyCount >= 10) {
+      req.files?.forEach((f) => { try { fs.unlinkSync(f.path); } catch {} });
+      return res.status(400).json({ error: 'You have reached the maximum limit of 10 stories per account.' });
+    }
+
     const { title, relationship = '', content, is_public = 1 } = req.body;
 
     const result = db
@@ -159,7 +168,7 @@ router.put(
     const is_public =
       req.body.is_public !== undefined ? (req.body.is_public ? 1 : 0) : story.is_public;
 
-    db.prepare('UPDATE stories SET title = ?, relationship = ?, content = ?, is_public = ? WHERE id = ?').run(
+    db.prepare('UPDATE stories SET title = ?, relationship = ?, content = ?, is_public = ?, edited_at = datetime(\'now\') WHERE id = ?').run(
       title, relationship, content, is_public, story.id
     );
 

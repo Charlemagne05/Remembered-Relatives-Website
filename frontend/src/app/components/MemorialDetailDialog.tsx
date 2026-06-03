@@ -404,6 +404,11 @@ export function MemorialDetailDialog({
                 <CalendarTodayIcon fontSize="small" color="action" />
                 <Typography variant="body2">
                   {new Date(memorial.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  {memorial.edited_at && (
+                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      (edited {new Date(memorial.edited_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                    </Typography>
+                  )}
                 </Typography>
               </Box>
             </Box>

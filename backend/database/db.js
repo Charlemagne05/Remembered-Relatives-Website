@@ -71,6 +71,11 @@ try {
   db.exec(`ALTER TABLE stories ADD COLUMN relationship TEXT NOT NULL DEFAULT ''`);
 } catch { /* déjà présente */ }
 
+// Migration : ajoute edited_at pour tracer les modifications
+try {
+  db.exec(`ALTER TABLE stories ADD COLUMN edited_at TEXT`);
+} catch { /* déjà présente */ }
+
 // Table pour les photos multiples (max 15 par story)
 db.exec(`
   CREATE TABLE IF NOT EXISTS story_images (

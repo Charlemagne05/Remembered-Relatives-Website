@@ -134,14 +134,39 @@ export default function App() {
     localStorage.setItem('backgroundColor', color);
   };
 
+  const handleAddStoryClick = () => {
+    if (!currentUser) {
+      setAuthDialogOpen(true);
+      return;
+    }
+    const userStoryCount = memorials.filter((m) => m.user_id === currentUser.id).length;
+    if (userStoryCount >= 10) {
+      alert('You have reached the maximum limit of 10 stories per account.');
+      return;
+    }
+    setCreateDialogOpen(true);
+  };
+
   const handleViewAuthorProfile = (authorName: string, authorId: number) => {
     setSelectedAuthorName(authorName);
     setSelectedAuthorId(authorId);
     setProfileDialogOpen(true);
   };
 
+  const isBackgroundImage = backgroundColor.startsWith('url(');
+
   return (
-    <Box sx={{ minHeight: '100vh', background: backgroundColor }}>
+    <Box sx={{
+      minHeight: '100vh',
+      ...(isBackgroundImage
+        ? {
+            backgroundImage: backgroundColor,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'fixed',
+          }
+        : { background: backgroundColor }),
+    }}>
       <AppBar position="static" color="transparent" elevation={0}
         sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Toolbar>
@@ -221,7 +246,7 @@ export default function App() {
               </Button>
             ) : (
               <Button variant="contained" size="large" startIcon={<AddIcon />}
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={handleAddStoryClick}
                 sx={{ fontSize: '1.25rem', py: 2, px: 5, minWidth: 250 }}>
                 Post a Story
               </Button>
@@ -249,7 +274,7 @@ export default function App() {
 
         <Fab color="primary" aria-label="add memorial"
           sx={{ position: 'fixed', bottom: 32, right: 32 }}
-          onClick={() => currentUser ? setCreateDialogOpen(true) : setAuthDialogOpen(true)}>
+          onClick={handleAddStoryClick}>
           <AddIcon />
         </Fab>
 
