@@ -1,5 +1,13 @@
 require('dotenv').config();
 
+// Fallback so the server starts even without a .env file
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = 'relatives_remembered_default_dev_key_change_in_prod';
+}
+if (!process.env.PORT) {
+  process.env.PORT = '3001';
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
