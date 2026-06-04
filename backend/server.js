@@ -31,6 +31,15 @@ app.use('/api/admin', adminRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// Serve built React frontend in production
+const frontendDist = path.join(__dirname, '../frontend/dist');
+if (require('fs').existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
+
 app.use((err, req, res, next) => {
   // Erreurs Multer (upload fichiers)
   if (err.code === 'LIMIT_FILE_SIZE') {
@@ -50,8 +59,24 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Relatives Remembered API running on http://localhost:${PORT}`);
+  // Auto-create admin account on first start
+  try {
+    const db = require('./database/db');
+    const bcrypt = require('bcryptjs');
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@memorial.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(adminUsername);
+    if (!existing) {
+      const hash = bcrypt.hashSync(adminPassword, 10);
+      db.prepare('INSERT INTO users (username, email, password_hash, is_admin) VALUES (?, ?, ?, 1)')
+        .run(adminUsername, adminEmail, hash);
+      console.log(`Admin account created: ${adminUsername}`);
+    }
+  } catch (e) { console.error('Admin seed error:', e.message); }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Relatives Remembered API running on http://0.0.0.0:${PORT}`);
   });
 }
 

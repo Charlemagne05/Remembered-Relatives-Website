@@ -1,7 +1,11 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'relatives_remembered.db');
+// In production (Railway), use /data volume for persistence. Fallback to local for dev.
+const defaultDbPath = process.env.NODE_ENV === 'production'
+  ? '/data/relatives_remembered.db'
+  : path.join(__dirname, 'relatives_remembered.db');
+const DB_PATH = process.env.DB_PATH || defaultDbPath;
 
 const db = new DatabaseSync(DB_PATH);
 
